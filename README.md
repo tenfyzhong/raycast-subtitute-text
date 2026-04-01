@@ -41,3 +41,9 @@ npm test
 npm run lint
 npm run build
 ```
+
+## CI
+
+- GitHub Actions workflow `.github/workflows/unit-tests.yml` runs `npm test` on:
+  - push to `main` and `feat/**`
+  - pull requests targeting `main`
