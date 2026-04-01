@@ -1,116 +1,116 @@
 # Raycast GNU sed Substitute Plugin Design
 
 - Date: 2026-04-01
-- Status: Draft Approved in Conversation
+- Status: Approved
 - Owner: @tenfyzhong
 
 ## 1. Goal
 
-实现一个 Raycast 插件命令：用户选中文本后触发快捷键，输入 GNU sed 替换规则，对选中文本进行替换并回写原应用。
+Build a Raycast extension command that lets users select text in any app, trigger the command, enter a GNU sed substitution rule, preview the result, and write the replaced text back to the original app.
 
-核心目标：
+Core goals:
 
-1. 规则兼容 GNU sed `s` 命令，尽量完整兼容。
-2. 在表单中提供实时预览（基于真实 `gsed` 结果）。
-3. 支持最近规则列表和收藏规则列表。
-4. 支持收藏规则手动排序。
-5. 历史规则去重、置顶、容量上限可配置。
+1. Keep compatibility with GNU sed `s` substitution behavior as much as possible.
+2. Provide real-time preview using actual `gsed` output.
+3. Support recent rules and favorite rules.
+4. Support manual ordering for favorites.
+5. Support deduplicated history with configurable max size.
 
 ## 2. Scope and Non-Goals
 
 ### In Scope
 
-1. 单命令 `Substitute Selected Text`，UI 形态为 `Form`。
-2. 输入规则格式：`/pattern/replacement/flags`（无需输入前缀 `s`），并支持自定义分隔符，例如 `#foo#bar#g`。
-3. 仅支持单条替换规则（单条 `s` 表达式）。
-4. 默认按 GNU sed 逐行语义处理多行文本。
-5. 最近规则和收藏规则同时展示在同一个 Form 中。
-6. 收藏区提供上移/下移动作进行手动排序。
-7. 历史区提供删除单条和清空历史。
-8. 历史上限来自 Raycast 全局配置项，默认 `10`。
-9. 当 `gsed` 不存在时阻止执行并给出安装引导。
-10. 无法读取选中文本时直接报错退出。
+1. One command: `Substitute Selected Text` with a `Form` UI.
+2. Rule input format: `/pattern/replacement/flags` (no need to type leading `s`) and custom delimiters such as `#foo#bar#g`.
+3. Single substitution expression only (single `s` expression).
+4. Multi-line input follows GNU sed line-by-line semantics by default.
+5. Show recents and favorites in the same Form.
+6. Favorites support manual reorder via move up/down.
+7. Recents support delete single item and clear all.
+8. History limit is configured via Raycast global preferences, default `10`.
+9. If `gsed` is missing, block execution and show installation guidance.
+10. If selected text cannot be read, fail and exit immediately.
 
 ### Non-Goals
 
-1. 不支持多条 `-e` 或完整 sed 脚本。
-2. 不做“失败规则特殊标记”与筛选。
-3. 不支持无选区时手动粘贴输入文本。
-4. 不做收藏区拖拽排序（采用上移/下移）。
+1. No multi-`-e` chains and no full sed scripts.
+2. No special failed-rule marker or failed-rule filtering.
+3. No manual input fallback when no text is selected.
+4. No drag-and-drop favorite ordering.
 
 ## 3. UX Flow
 
 ### 3.1 Entry
 
-1. 用户在任意支持选区的应用选中文本。
-2. 触发 Raycast 命令。
-3. 命令启动时立即读取选中文本：
-   - 成功：进入 Form。
-   - 失败：Toast 报错并退出。
+1. User selects text in a target application.
+2. User triggers the Raycast command.
+3. Command startup immediately reads selected text:
+   - Success: open Form.
+   - Failure: show toast and exit.
 
 ### 3.2 Form Structure
 
-1. Rule 输入框（可编辑）。
-2. Original（只读，展示原选区内容）。
-3. Preview（只读，展示替换结果或错误信息）。
-4. Favorites 区（按自定义顺序）。
-5. Recent 区（按最近使用倒序）。
-6. 主提交动作 `Apply Replacement`。
-7. 只要规则非空即可提交；解析/执行错误由提交后错误处理链路反馈并记录历史。
+1. Editable `Rule` input.
+2. Read-only `Original` text.
+3. Read-only `Preview` text or error message.
+4. Favorites section (custom order).
+5. Recents section (most recent first).
+6. Primary action: `Apply Replacement`.
+7. Submission is allowed for any non-empty rule; parse/execute failures are reported after submit and still recorded in history.
 
 ### 3.3 Rule Usage
 
-1. 手动输入规则：
-   - 输入变更后防抖触发预览计算。
-2. 从 Favorites/Recent 选择规则：
-   - 回填到输入框。
-   - 自动刷新预览。
-   - 仅在用户点击 `Apply Replacement` 后真正替换。
+1. Typing a rule manually:
+   - Input changes trigger debounced preview execution.
+2. Selecting from Favorites/Recents:
+   - Fill the input.
+   - Refresh preview automatically.
+   - Only apply after explicit `Apply Replacement` confirmation.
 
-### 3.4 Manage Lists
+### 3.4 List Management
 
-1. Favorites 项动作：使用、上移、下移、取消收藏。
-2. Recent 项动作：使用、删除该条。
-3. Recent 全局动作：清空历史。
+1. Favorite actions: use, move up, move down, unfavorite.
+2. Recent item actions: use, delete item.
+3. Recent global action: clear history.
 
 ## 4. Technical Design
 
 ### 4.1 Architecture
 
-单命令 + 本地持久化 + `gsed` 子进程执行：
+Single command + local persistence + `gsed` subprocess:
 
-1. `command` 层：Raycast Form 和 actions。
-2. `rule` 层：规则解析、格式校验、构造 sed 表达式。
-3. `preview` 层：防抖执行 `gsed` 生成预览。
-4. `apply` 层：执行替换并回写原应用（剪贴板 + paste）。
-5. `storage` 层：历史和收藏读写、去重、排序、裁剪。
-6. `preferences` 层：读取 `historyLimit` 配置。
+1. `command` layer: Raycast Form and actions.
+2. `rule` layer: parse and validate rule input, build sed expression.
+3. `preview` layer: debounced `gsed` preview execution.
+4. `apply` layer: apply replacement and write back to source app (clipboard + paste).
+5. `storage` layer: history/favorites persistence, dedupe, reorder, trimming.
+6. `preferences` layer: read `historyLimit` preference.
 
 ### 4.2 GNU sed Execution Strategy
 
-选择方案：直接调用本机 `gsed`（推荐方案）。
+Chosen approach: execute local `gsed` directly.
 
-1. 预览和最终应用都走同一执行路径，保证一致性。
-2. 每次预览使用防抖（建议 200ms）。
-3. 执行形态：
-   - 将当前选中文本作为 stdin 输入。
-   - 使用 `gsed -e "<s-expression>"` 输出结果。
-4. 若 `gsed` 缺失，提示安装：
+1. Preview and apply share the same execution path to keep behavior consistent.
+2. Preview calls are debounced (target 200 ms).
+3. Execution model:
+   - Pass selected text through stdin.
+   - Run `gsed -e "<s-expression>"` and capture output.
+4. If `gsed` is not found, show:
    - `brew install gnu-sed`
-   - 并说明命令需要 `gsed` 可执行文件。
+   - a note that this command requires `gsed` on PATH.
 
 ### 4.3 Rule Parsing
 
-输入：`/foo/bar/g` 或 `#foo#bar#g`
+Input examples: `/foo/bar/g` or `#foo#bar#g`
 
-输出：`s/foo/bar/g` 或 `s#foo#bar#g`
+Output examples: `s/foo/bar/g` or `s#foo#bar#g`
 
-规则：
+Rules:
 
-1. 第一个字符作为分隔符。
-2. 解析 pattern、replacement、flags 三段。
-3. 支持分隔符在 pattern/replacement 中的转义。
-4. 解析失败时在 Preview 区显示错误。
+1. First character is the delimiter.
+2. Parse into `pattern`, `replacement`, and `flags`.
+3. Support escaped delimiter inside `pattern` and `replacement`.
+4. Parse failures are surfaced in Preview.
 
 ### 4.4 Data Model
 
@@ -129,78 +129,78 @@ type FavoriteItem = {
 };
 ```
 
-存储策略：
+Persistence behavior:
 
-1. 历史去重：
-   - 插入前若存在同 `rawInput`，删除旧项后插入到头部。
-   - 记录时机为用户显式提交一次替换尝试（成功或失败都记录）。
-2. 历史容量：
-   - 读取 `historyLimit`（默认 10），超出后从尾部裁剪。
-3. 收藏独立：
-   - 与历史分离存储。
-   - 同规则可同时存在于历史和收藏。
-4. 收藏排序：
-   - 通过 `order` 实现上移/下移。
+1. History dedupe:
+   - On insert, if same `rawInput` exists, remove old item and insert at head.
+   - Record on every explicit apply attempt, including failures.
+2. History limit:
+   - Read `historyLimit` (default 10), trim oldest overflow items.
+3. Favorites are independent:
+   - Stored separately from recents.
+   - Same rule can exist in both lists.
+4. Favorite ordering:
+   - Reorder by `order` through move up/down.
 
 ### 4.5 Apply Back to Source App
 
-执行成功后：
+After successful sed execution:
 
-1. 把替换结果写入剪贴板。
-2. 触发粘贴动作覆盖当前选区（依赖用户焦点仍在目标应用）。
+1. Write transformed text to clipboard.
+2. Paste over current selection in the previously focused app.
 
-边界：
+Edge behavior:
 
-1. 如果焦点切走导致未正确粘贴，提示用户重试。
-2. 不尝试高级编辑器级 API 集成，维持通用性。
+1. If focus changes and paste does not hit the target app, show retry guidance.
+2. Keep generic clipboard/paste flow, no app-specific editor integrations.
 
 ## 5. Error Handling
 
-1. 无选区：报错并退出。
-2. `gsed` 缺失：报错并给安装指引。
-3. 规则解析失败：显示错误；若用户提交尝试，则失败并记录历史。
-4. `gsed` 执行失败：显示 stderr；不回写选区，但记录历史。
-5. 替换结果回写失败：报错提示，保留可重试状态。
+1. No selected text: fail and exit.
+2. `gsed` missing: fail with install guidance.
+3. Parse failure: show parse error; submit can still be attempted and should be recorded.
+4. `gsed` execution failure: show stderr; do not paste; still record in history.
+5. Paste-back failure: show error and allow retry.
 
 ## 6. Testing Strategy
 
-采用项目标准单元测试（不使用一次性脚本）：
+Use reusable unit tests (no one-off scripts):
 
-1. `rule parser`：
-   - 正常规则、转义分隔符、非法输入。
-2. `history manager`：
-   - 去重置顶、容量裁剪、删除单条、清空。
-3. `favorites manager`：
-   - 添加收藏、取消收藏、上移下移边界。
-4. `preview runner`：
-   - 成功输出、`gsed` 缺失、执行错误。
-5. `integration-lite`（可 mock Raycast API）：
-   - 选择历史/收藏后回填并刷新预览。
-   - 预览失败时仍可提交尝试，提交后失败并入历史。
+1. `rule parser`
+   - valid expressions, escaped delimiters, invalid expressions
+2. `history manager`
+   - dedupe-to-front, max-size trim, delete item, clear all
+3. `favorites manager`
+   - add favorite, remove favorite, move up/down bounds
+4. `gsed runner`
+   - successful run, missing binary, execution error
+5. `integration-lite` with mocks
+   - selecting favorite/recent fills rule and refreshes preview
+   - preview failure can still be submitted; failed submit is stored in history
 
 ## 7. Preferences
 
-Raycast Extension Preferences:
+Raycast extension preferences:
 
-1. `historyLimit`（number）
-2. 默认值：`10`
-3. 生效方式：每次写历史时读取并裁剪
+1. `historyLimit` (number-like text)
+2. Default: `10`
+3. Applied whenever history is written.
 
 ## 8. Implementation Milestones
 
-1. 建立命令骨架与 Form。
-2. 完成规则解析与 `gsed` 预览链路。
-3. 接入替换回写链路（clipboard + paste）。
-4. 接入历史与收藏存储和管理动作。
-5. 完成测试与 README 更新。
+1. Command scaffold + Form structure.
+2. Rule parser + `gsed` preview pipeline.
+3. Apply-back flow (clipboard + paste).
+4. History/favorites persistence and management actions.
+5. Tests and README updates.
 
 ## 9. Acceptance Criteria
 
-1. 输入 `/foo/bar/g` 可实时看到预览并成功替换回原应用。
-2. 输入自定义分隔符规则（如 `#foo#bar#g`）可正确执行。
-3. 历史列表无重复，相同规则复用后置顶。
-4. 历史数量不超过 `historyLimit`。
-5. 收藏支持上移/下移，顺序持久化。
-6. 从历史/收藏选择规则后需显示预览，用户确认后才执行。
-7. 无选区或缺少 `gsed` 时，行为符合约束（报错退出/安装提示）。
-8. 替换尝试失败（语法或执行错误）时，规则仍记录在历史中。
+1. `/foo/bar/g` provides real-time preview and successful replacement.
+2. Custom delimiter rules (for example `#foo#bar#g`) work.
+3. History has no duplicates; reused rule moves to front.
+4. History never exceeds `historyLimit`.
+5. Favorites support persisted move up/down ordering.
+6. Selecting from favorites/recents shows preview and requires explicit confirmation.
+7. Missing selection or missing `gsed` follows expected fail-fast behavior.
+8. Failed apply attempts (parse or execution errors) are still recorded in history.
