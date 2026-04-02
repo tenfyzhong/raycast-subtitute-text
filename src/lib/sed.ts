@@ -13,15 +13,9 @@ export type CommandExecutor = (
   input?: string,
 ) => Promise<CommandResult>;
 
-const FALLBACK_GSED_BINARIES = [
-  "gsed",
-  "/opt/homebrew/bin/gsed",
-  "/usr/local/bin/gsed",
-  "/opt/homebrew/opt/gnu-sed/libexec/gnubin/sed",
-  "/usr/local/opt/gnu-sed/libexec/gnubin/sed",
-];
+const FALLBACK_SED_BINARIES = ["sed", "/usr/bin/sed", "/bin/sed"];
 
-let cachedGsedBinary: string | null | undefined;
+let cachedSedBinary: string | null | undefined;
 
 export async function executeCommand(
   command: string,
@@ -55,48 +49,43 @@ export async function executeCommand(
   });
 }
 
-export async function checkGsedAvailability(
+export async function checkSedAvailability(
   executor: CommandExecutor = executeCommand,
 ): Promise<boolean> {
-  const binary = await resolveGsedBinary(executor);
+  const binary = await resolveSedBinary(executor);
   return Boolean(binary);
 }
 
-export async function runGsedSubstitution(
+export async function runSedSubstitution(
   sedExpression: string,
   input: string,
   executor: CommandExecutor = executeCommand,
 ): Promise<string> {
-  const gsedBinary = await resolveGsedBinary(executor);
-  if (!gsedBinary) {
-    throw new Error(
-      "GNU sed is not available. Install it with: brew install gnu-sed",
-    );
+  const sedBinary = await resolveSedBinary(executor);
+  if (!sedBinary) {
+    throw new Error("macOS sed is not available on this system.");
   }
 
-  const result = await executor(gsedBinary, ["-e", sedExpression], input);
+  const result = await executor(sedBinary, ["-e", sedExpression], input);
 
   if (result.code !== 0) {
-    const message = result.stderr.trim() || "gsed execution failed";
+    const message = result.stderr.trim() || "sed execution failed";
     throw new Error(message);
   }
 
   return result.stdout;
 }
 
-async function resolveGsedBinary(
+async function resolveSedBinary(
   executor: CommandExecutor = executeCommand,
 ): Promise<string | null> {
-  if (executor === executeCommand && cachedGsedBinary !== undefined) {
-    return cachedGsedBinary;
+  if (executor === executeCommand && cachedSedBinary !== undefined) {
+    return cachedSedBinary;
   }
 
   const candidates = new Set<string>([
-    process.env.GSED_PATH ?? "",
-    process.env.HOMEBREW_PREFIX
-      ? `${process.env.HOMEBREW_PREFIX}/bin/gsed`
-      : "",
-    ...FALLBACK_GSED_BINARIES,
+    process.env.SED_PATH ?? "",
+    ...FALLBACK_SED_BINARIES,
   ]);
 
   for (const candidate of candidates) {
@@ -104,17 +93,17 @@ async function resolveGsedBinary(
       continue;
     }
 
-    const result = await executor(candidate, ["--version"]);
+    const result = await executor(candidate, ["-e", "s/a/a/"], "a");
     if (result.code === 0) {
       if (executor === executeCommand) {
-        cachedGsedBinary = candidate;
+        cachedSedBinary = candidate;
       }
       return candidate;
     }
   }
 
   if (executor === executeCommand) {
-    cachedGsedBinary = null;
+    cachedSedBinary = null;
   }
   return null;
 }

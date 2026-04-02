@@ -12,7 +12,7 @@ import {
 } from "@raycast/api";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { checkGsedAvailability, runGsedSubstitution } from "./lib/gsed";
+import { checkSedAvailability, runSedSubstitution } from "./lib/sed";
 import { parseSubstituteRule } from "./lib/rule-parser";
 import { pasteTextToFrontmostApp } from "./lib/paste";
 import {
@@ -94,12 +94,12 @@ export default function Command(): JSX.Element | null {
 
   useEffect(() => {
     async function initialize(): Promise<void> {
-      const hasGsed = await checkGsedAvailability();
-      if (!hasGsed) {
+      const hasSed = await checkSedAvailability();
+      if (!hasSed) {
         await showToast({
           style: Toast.Style.Failure,
-          title: "GNU sed is required",
-          message: "Install it with: brew install gnu-sed",
+          title: "macOS sed is required",
+          message: "Unable to locate a working sed binary",
         });
         setHasFatalError(true);
         setIsLoading(false);
@@ -151,7 +151,7 @@ export default function Command(): JSX.Element | null {
       void (async () => {
         try {
           const parsed = parseSubstituteRule(trimmedRule);
-          const output = await runGsedSubstitution(
+          const output = await runSedSubstitution(
             parsed.sedExpression,
             originalText,
           );
@@ -208,7 +208,7 @@ export default function Command(): JSX.Element | null {
       await refreshHistory(updatedHistory);
 
       const parsed = parseSubstituteRule(trimmedRule);
-      const transformed = await runGsedSubstitution(
+      const transformed = await runSedSubstitution(
         parsed.sedExpression,
         originalText,
       );

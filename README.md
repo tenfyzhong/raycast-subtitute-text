@@ -1,25 +1,19 @@
 # Substitute Selected Text (Raycast)
 
-A Raycast extension that applies a GNU sed substitution rule to currently selected text.
+A Raycast extension that applies a macOS `sed` substitution rule to currently selected text.
 
 ## Features
 
 - Rule input in `/pattern/replacement/flags` format (leading `s` is optional)
 - Custom delimiters (for example `#foo#bar#g`)
-- Real-time preview powered by actual `gsed` execution
+- Real-time preview powered by actual `sed` execution
 - Recent rules with dedupe-to-front and configurable history limit
 - Rule history records both successful and failed apply attempts
 
 ## Requirements
 
 - Raycast
-- GNU sed available as `gsed`
-
-Install GNU sed on macOS:
-
-```bash
-brew install gnu-sed
-```
+- macOS with built-in `sed` (`/usr/bin/sed`)
 
 ## Usage
 

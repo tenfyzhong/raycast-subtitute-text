@@ -2,7 +2,7 @@
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "substitute-selected-text",
   "title": "Substitute Selected Text",
-  "description": "Apply GNU sed substitution rules to selected text with preview and recents.",
+  "description": "Apply macOS sed substitution rules to selected text with preview and recents.",
   "icon": "icon.png",
   "author": "tenfyzhong",
   "license": "MIT",
@@ -10,7 +10,7 @@
     {
       "name": "substitute-selected-text",
       "title": "Substitute Selected Text",
-      "description": "Run a GNU sed substitute rule on selected text",
+      "description": "Run a macOS sed substitute rule on selected text",
       "mode": "view",
       "icon": "icon.png"
     }
